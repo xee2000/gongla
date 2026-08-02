@@ -1,21 +1,33 @@
-# BUYS Web
+# 공라
 
-`../active_deals_10_sites.json`의 크롤링 결과를 쇼핑몰별 상품 카드로 보여주는 React 웹입니다.
+YouTube, 네이버 스마트스토어, 쇼핑몰 등에 흩어진 기간 한정 공동구매를
+한눈에 모아보는 서비스입니다.
 
-## 실행
+## 현재 테스트 기능
+
+- 출처별 공동구매 상품 조회
+- 카카오 로그인 UI 테스트 모드
+- 서버에서 발급하는 HTTP-only 테스트 세션
+- 로그인 사용자와 상품 이동 클릭 이력 D1 저장
+- 상품 클릭 이력 저장 후 외부 구매처 이동
+
+테스트 로그인은 실제 카카오 계정과 연결되지 않습니다. 정식 카카오 로그인을 적용할 때는
+Kakao Developers 앱과 운영 도메인의 Redirect URI가 필요합니다.
+
+## 로컬 실행
+
+Node.js 22 이상이 필요합니다.
 
 ```bash
-cd /Users/ijeongho/GitHub/buys/buys_web
 npm install
 npm run dev
 ```
 
-브라우저에서 `http://127.0.0.1:5173`을 엽니다.
-
-## 빌드
+## 배포 빌드
 
 ```bash
 npm run build
 ```
 
-크롤링을 다시 실행해 `active_deals_10_sites.json`을 갱신한 뒤 웹을 새로고침하면 최신 결과가 반영됩니다.
+`gongla_server`에는 크롤링과 Supabase 상품 저장을 담당하는 NestJS 서버가 포함되어
+있습니다. 웹의 테스트 로그인과 이동 이력은 배포 환경의 D1 데이터베이스에 저장됩니다.
