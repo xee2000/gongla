@@ -2,10 +2,10 @@ import type { Config } from "@netlify/functions";
 import {
   crawlerTargets,
   crawlProductPage,
-  discoverNaverLimitedProducts,
   discoverYoutubePaidPromotions,
   saveCrawledProducts,
 } from "../../lib/product-crawler";
+import type { CrawledProduct } from "../../lib/product-crawler";
 
 export default async function handler(request: Request) {
   const expected = process.env.CRAWLER_ADMIN_KEY;
@@ -14,18 +14,15 @@ export default async function handler(request: Request) {
   }
 
   const errors: Array<{ url: string; error: string }> = [];
-  const discoveries = await Promise.allSettled([
-    discoverYoutubePaidPromotions(),
-    discoverNaverLimitedProducts(),
-  ]);
-  const products = discoveries.flatMap((result, index) => {
-    if (result.status === "fulfilled") return result.value;
+  let products: CrawledProduct[] = [];
+  try {
+    products = await discoverYoutubePaidPromotions();
+  } catch (error) {
     errors.push({
-      url: index === 0 ? "youtube-api" : "naver-shopping-api",
-      error: result.reason instanceof Error ? result.reason.message : String(result.reason),
+      url: "youtube-api",
+      error: error instanceof Error ? error.message : String(error),
     });
-    return [];
-  });
+  }
   for (const target of crawlerTargets()) {
     try {
       const product = await crawlProductPage(target.url, target.source);

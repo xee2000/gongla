@@ -141,46 +141,6 @@ export async function discoverYoutubePaidPromotions(now = new Date()) {
   });
 }
 
-export async function discoverNaverLimitedProducts(now = new Date()) {
-  const clientId = process.env.NAVER_SEARCH_CLIENT_ID;
-  const clientSecret = process.env.NAVER_SEARCH_CLIENT_SECRET;
-  if (!clientId || !clientSecret) return [];
-  const queries = (process.env.NAVER_SHOPPING_QUERIES ?? "공동구매,기간한정,타임세일,오늘만 특가")
-    .split(/[\n,]/).map((query) => query.trim()).filter(Boolean);
-  const candidates = new Map<string, { link: string; title: string; image?: string; lprice?: string; hprice?: string; mallName?: string; productId?: string }>();
-  for (const query of queries) {
-    const url = new URL("https://openapi.naver.com/v1/search/shop.json");
-    url.search = new URLSearchParams({ query, display: "50", sort: "date" }).toString();
-    const response = await fetch(url, {
-      headers: { "X-Naver-Client-Id": clientId, "X-Naver-Client-Secret": clientSecret },
-      signal: AbortSignal.timeout(25_000),
-    });
-    if (!response.ok) throw new Error(`Naver shopping search failed: HTTP ${response.status}`);
-    const json = (await response.json()) as { items?: Array<{ link: string; title: string; image?: string; lprice?: string; hprice?: string; mallName?: string; productId?: string }> };
-    for (const item of json.items ?? []) candidates.set(item.productId ?? item.link, item);
-  }
-
-  const products: CrawledProduct[] = [];
-  const maxCandidates = Math.max(1, Number(process.env.NAVER_MAX_CANDIDATES ?? 30));
-  for (const candidate of Array.from(candidates.values()).slice(0, maxCandidates)) {
-    try {
-      const initialSource = /smartstore\.naver|brand\.naver/.test(candidate.link) ? "naver_smartstore" : "shopping_mall";
-      const product = await crawlProductPage(candidate.link, initialSource, now);
-      if (!product) continue;
-      product.name = candidate.title.replace(/<\/?b>/g, "") || product.name;
-      product.image_url = candidate.image ?? product.image_url;
-      product.sale_price = asPrice(candidate.lprice) ?? product.sale_price;
-      product.original_price = asPrice(candidate.hprice) ?? product.original_price;
-      product.source_name = candidate.mallName ?? product.source_name;
-      product.external_id = candidate.productId ?? product.external_id;
-      products.push(product);
-    } catch {
-      // 개별 후보 페이지 실패는 다음 상품으로 계속 진행한다.
-    }
-  }
-  return products;
-}
-
 function statusAt(start: string, end: string, now: Date): CrawledProduct["status"] {
   if (now < new Date(start)) return "scheduled";
   if (now >= new Date(end)) return "ended";
