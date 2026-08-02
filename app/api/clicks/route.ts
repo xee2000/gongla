@@ -1,6 +1,5 @@
-import { getCurrentUser } from "../../../db/session";
-import { getDb } from "../../../db";
-import { productClicks } from "../../../db/schema";
+import { getCurrentUser } from "../../../lib/session";
+import { saveProductClick } from "../../../lib/storage";
 
 type ClickBody = {
   productId?: unknown;
@@ -33,8 +32,7 @@ export async function POST(request: Request) {
     return Response.json({ message: "허용되지 않은 이동 주소입니다." }, { status: 400 });
   }
 
-  const db = await getDb();
-  await db.insert(productClicks).values({
+  await saveProductClick({
     userId: user.id,
     productId: body.productId.slice(0, 200),
     productName: body.productName.slice(0, 500),

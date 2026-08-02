@@ -1,4 +1,4 @@
-import { getCurrentUser } from "../../../../db/session";
+import { getCurrentUser } from "../../../../lib/session";
 
 export async function GET() {
   const user = await getCurrentUser();

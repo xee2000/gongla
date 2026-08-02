@@ -1,8 +1,6 @@
-import { and, eq } from "drizzle-orm";
 import { cookies } from "next/headers";
-import { getDb } from "../../../../../db";
-import { hashToken, SESSION_COOKIE } from "../../../../../db/session";
-import { userSessions, users } from "../../../../../db/schema";
+import { setSession } from "../../../../../lib/session";
+import { saveKakaoUser } from "../../../../../lib/storage";
 
 const STATE_COOKIE = "gongla_kakao_oauth_state";
 
@@ -69,43 +67,8 @@ export async function GET(request: Request) {
     kakaoUser.properties?.nickname ??
     `카카오 사용자 ${providerUserId.slice(-4)}`;
 
-  const db = await getDb();
-  const existing = await db
-    .select({ id: users.id })
-    .from(users)
-    .where(and(eq(users.provider, "kakao"), eq(users.providerUserId, providerUserId)))
-    .limit(1);
-  const now = Date.now();
-  const userId = existing[0]?.id ?? `kakao-${crypto.randomUUID()}`;
-
-  if (existing[0]) {
-    await db.update(users).set({ nickname, lastLoginAt: now }).where(eq(users.id, userId));
-  } else {
-    await db.insert(users).values({
-      id: userId,
-      provider: "kakao",
-      providerUserId,
-      nickname,
-      createdAt: now,
-      lastLoginAt: now,
-    });
-  }
-
-  const sessionToken = `${crypto.randomUUID()}${crypto.randomUUID()}`;
-  const expiresAt = now + 7 * 24 * 60 * 60 * 1000;
-  await db.insert(userSessions).values({
-    tokenHash: await hashToken(sessionToken),
-    userId,
-    createdAt: now,
-    expiresAt,
-  });
-  cookieStore.set(SESSION_COOKIE, sessionToken, {
-    httpOnly: true,
-    secure: true,
-    sameSite: "lax",
-    path: "/",
-    maxAge: 7 * 24 * 60 * 60,
-  });
+  const user = await saveKakaoUser(providerUserId, nickname);
+  await setSession({ id: user.id, nickname: user.nickname, provider: user.provider });
 
   return Response.redirect(new URL("/", request.url));
 }
