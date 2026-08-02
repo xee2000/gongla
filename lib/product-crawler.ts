@@ -44,7 +44,7 @@ function flattenJsonLd(value: unknown): JsonObject[] {
   return [node, ...flattenJsonLd(node["@graph"])];
 }
 
-function inferKoreanPeriod(content: string, now: Date) {
+export function inferKoreanPeriod(content: string, now: Date) {
   const match = content.replace(/\s+/g, " ").match(
     /(?:(\d{4})[.년\-/]\s*)?(\d{1,2})[.월\-/]\s*(\d{1,2})일?[^\d]{0,30}(?:부터|~|～|-)[^\d]{0,30}(?:(\d{4})[.년\-/]\s*)?(\d{1,2})[.월\-/]\s*(\d{1,2})일?(?:[^\d]{0,15}(오전|오후)?\s*(\d{1,2})시(?:\s*(\d{1,2})분)?)?/,
   );
@@ -58,6 +58,127 @@ function inferKoreanPeriod(content: string, now: Date) {
   const end = new Date(Date.UTC(endYear, Number(match[5]) - 1, Number(match[6]), hour - 9, Number(match[9] || 59)));
   if (end <= start) end.setUTCFullYear(end.getUTCFullYear() + 1);
   return { start: start.toISOString(), end: end.toISOString() };
+}
+
+function firstExternalUrl(content: string, excludedHosts: string[]) {
+  const matches = content.match(/https?:\/\/[^\s<>)\]]+/g) ?? [];
+  return matches.find((candidate) => {
+    try {
+      return !excludedHosts.some((host) => new URL(candidate).hostname.includes(host));
+    } catch {
+      return false;
+    }
+  });
+}
+
+export async function discoverYoutubePaidPromotions(now = new Date()) {
+  const key = process.env.YOUTUBE_API_KEY;
+  if (!key) return [];
+  const days = Math.max(1, Number(process.env.YOUTUBE_LOOKBACK_DAYS ?? 14));
+  const publishedAfter = new Date(now.getTime() - days * 86_400_000).toISOString();
+  const search = new URL("https://www.googleapis.com/youtube/v3/search");
+  search.search = new URLSearchParams({
+    part: "snippet",
+    type: "video",
+    videoPaidProductPlacement: "true",
+    order: "date",
+    maxResults: "50",
+    regionCode: "KR",
+    relevanceLanguage: "ko",
+    publishedAfter,
+    key,
+  }).toString();
+  const searchResponse = await fetch(search, { signal: AbortSignal.timeout(25_000) });
+  if (!searchResponse.ok) throw new Error(`YouTube search failed: HTTP ${searchResponse.status}`);
+  const searchJson = (await searchResponse.json()) as { items?: Array<{ id?: { videoId?: string } }> };
+  const ids = (searchJson.items ?? []).map((item) => item.id?.videoId).filter((id): id is string => Boolean(id));
+  if (!ids.length) return [];
+
+  const videosUrl = new URL("https://www.googleapis.com/youtube/v3/videos");
+  videosUrl.search = new URLSearchParams({
+    part: "snippet,paidProductPlacementDetails",
+    id: ids.join(","),
+    key,
+  }).toString();
+  const videosResponse = await fetch(videosUrl, { signal: AbortSignal.timeout(25_000) });
+  if (!videosResponse.ok) throw new Error(`YouTube videos failed: HTTP ${videosResponse.status}`);
+  const videosJson = (await videosResponse.json()) as {
+    items?: Array<{
+      id: string;
+      snippet?: {
+        title?: string;
+        description?: string;
+        channelTitle?: string;
+        thumbnails?: Record<string, { url?: string }>;
+      };
+      paidProductPlacementDetails?: { hasPaidProductPlacement?: boolean };
+    }>;
+  };
+
+  return (videosJson.items ?? []).flatMap((video): CrawledProduct[] => {
+    if (!video.paidProductPlacementDetails?.hasPaidProductPlacement) return [];
+    const description = video.snippet?.description ?? "";
+    const period = inferKoreanPeriod(description, now);
+    const purchaseUrl = firstExternalUrl(description, ["youtube.com", "youtu.be"]);
+    if (!period || !purchaseUrl || !video.snippet?.title) return [];
+    const thumbnails = Object.values(video.snippet.thumbnails ?? {});
+    return [{
+      external_id: video.id,
+      name: video.snippet.title,
+      original_price: null,
+      sale_price: null,
+      source: "youtube",
+      source_name: video.snippet.channelTitle ?? "YouTube",
+      image_url: thumbnails.at(-1)?.url ?? null,
+      sale_start_at: period.start,
+      sale_end_at: period.end,
+      purchase_url: purchaseUrl,
+      source_url: `https://www.youtube.com/watch?v=${video.id}`,
+      status: statusAt(period.start, period.end, now),
+      raw_data: { paidPromotion: true, description },
+      last_crawled_at: now.toISOString(),
+    }];
+  });
+}
+
+export async function discoverNaverLimitedProducts(now = new Date()) {
+  const clientId = process.env.NAVER_SEARCH_CLIENT_ID;
+  const clientSecret = process.env.NAVER_SEARCH_CLIENT_SECRET;
+  if (!clientId || !clientSecret) return [];
+  const queries = (process.env.NAVER_SHOPPING_QUERIES ?? "공동구매,기간한정,타임세일,오늘만 특가")
+    .split(/[\n,]/).map((query) => query.trim()).filter(Boolean);
+  const candidates = new Map<string, { link: string; title: string; image?: string; lprice?: string; hprice?: string; mallName?: string; productId?: string }>();
+  for (const query of queries) {
+    const url = new URL("https://openapi.naver.com/v1/search/shop.json");
+    url.search = new URLSearchParams({ query, display: "50", sort: "date" }).toString();
+    const response = await fetch(url, {
+      headers: { "X-Naver-Client-Id": clientId, "X-Naver-Client-Secret": clientSecret },
+      signal: AbortSignal.timeout(25_000),
+    });
+    if (!response.ok) throw new Error(`Naver shopping search failed: HTTP ${response.status}`);
+    const json = (await response.json()) as { items?: Array<{ link: string; title: string; image?: string; lprice?: string; hprice?: string; mallName?: string; productId?: string }> };
+    for (const item of json.items ?? []) candidates.set(item.productId ?? item.link, item);
+  }
+
+  const products: CrawledProduct[] = [];
+  const maxCandidates = Math.max(1, Number(process.env.NAVER_MAX_CANDIDATES ?? 30));
+  for (const candidate of Array.from(candidates.values()).slice(0, maxCandidates)) {
+    try {
+      const initialSource = /smartstore\.naver|brand\.naver/.test(candidate.link) ? "naver_smartstore" : "shopping_mall";
+      const product = await crawlProductPage(candidate.link, initialSource, now);
+      if (!product) continue;
+      product.name = candidate.title.replace(/<\/?b>/g, "") || product.name;
+      product.image_url = candidate.image ?? product.image_url;
+      product.sale_price = asPrice(candidate.lprice) ?? product.sale_price;
+      product.original_price = asPrice(candidate.hprice) ?? product.original_price;
+      product.source_name = candidate.mallName ?? product.source_name;
+      product.external_id = candidate.productId ?? product.external_id;
+      products.push(product);
+    } catch {
+      // 개별 후보 페이지 실패는 다음 상품으로 계속 진행한다.
+    }
+  }
+  return products;
 }
 
 function statusAt(start: string, end: string, now: Date): CrawledProduct["status"] {

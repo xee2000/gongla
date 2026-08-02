@@ -1,5 +1,11 @@
 import type { Config } from "@netlify/functions";
-import { crawlerTargets, crawlProductPage, saveCrawledProducts } from "../../lib/product-crawler";
+import {
+  crawlerTargets,
+  crawlProductPage,
+  discoverNaverLimitedProducts,
+  discoverYoutubePaidPromotions,
+  saveCrawledProducts,
+} from "../../lib/product-crawler";
 
 export default async function handler(request: Request) {
   const expected = process.env.CRAWLER_ADMIN_KEY;
@@ -7,8 +13,19 @@ export default async function handler(request: Request) {
     return new Response("Forbidden", { status: 403 });
   }
 
-  const products = [];
   const errors: Array<{ url: string; error: string }> = [];
+  const discoveries = await Promise.allSettled([
+    discoverYoutubePaidPromotions(),
+    discoverNaverLimitedProducts(),
+  ]);
+  const products = discoveries.flatMap((result, index) => {
+    if (result.status === "fulfilled") return result.value;
+    errors.push({
+      url: index === 0 ? "youtube-api" : "naver-shopping-api",
+      error: result.reason instanceof Error ? result.reason.message : String(result.reason),
+    });
+    return [];
+  });
   for (const target of crawlerTargets()) {
     try {
       const product = await crawlProductPage(target.url, target.source);
