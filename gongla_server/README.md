@@ -33,10 +33,15 @@ Supabase SQL Editor에서 다음 파일을 실행합니다.
 supabase/migrations/001_create_products.sql
 ```
 
-`.env.example`을 참고해 `.env`를 설정합니다. Publishable 키는 공개 상품 조회에는
-사용할 수 있지만 크롤링 결과 저장과 상태 변경에는 권한이 부족합니다. 운영 서버에는
-반드시 Supabase 프로젝트 설정에서 확인한 서버 전용 `SUPABASE_SERVICE_ROLE_KEY`를
-환경변수로 추가해야 합니다. 이 값은 GitHub나 클라이언트에 노출하면 안 됩니다.
+`.env.example`을 참고해 `.env`를 설정합니다. 현재 초기 운영 설정에서는 Publishable
+키만으로 상품 조회, 크롤링 결과 저장, 상태 변경을 모두 수행합니다. 마이그레이션은
+익명 역할에 상품의 `select`, `insert`, `update` 권한을 부여하며 삭제 권한은 허용하지
+않습니다.
+
+Publishable 키는 원래 공개 가능한 값이므로 이 구성에서는 외부 사용자가 상품 데이터를
+삽입하거나 수정할 가능성이 있습니다. 운영 안정화 이후에는
+`SUPABASE_SERVICE_ROLE_KEY`를 서버에만 설정하고 익명 쓰기 정책을 제거하는 것을
+권장합니다.
 
 ## 크롤링 시간
 

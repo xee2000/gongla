@@ -61,5 +61,28 @@ using (
   and sale_end_at > now()
 );
 
--- INSERT/UPDATE 정책은 의도적으로 공개하지 않습니다.
--- NestJS 서버의 SUPABASE_SERVICE_ROLE_KEY만 RLS를 우회해 수집 결과를 저장합니다.
+-- 초기 운영 단계에서는 Publishable 키만으로 NestJS 서버가 수집 결과를 저장하고
+-- 판매 상태를 갱신할 수 있도록 익명 역할의 쓰기를 허용합니다.
+drop policy if exists "publishable key can insert products" on public.products;
+create policy "publishable key can insert products"
+on public.products
+for insert
+to anon
+with check (
+  sale_end_at > sale_start_at
+  and purchase_url ~ '^https?://'
+);
+
+drop policy if exists "publishable key can update products" on public.products;
+create policy "publishable key can update products"
+on public.products
+for update
+to anon
+using (true)
+with check (
+  sale_end_at > sale_start_at
+  and purchase_url ~ '^https?://'
+);
+
+grant select, insert, update on public.products to anon;
+revoke delete on public.products from anon;
