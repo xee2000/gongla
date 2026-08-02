@@ -11,9 +11,9 @@ const formatPrice = (value: number | null) =>
 export default function DealsClient() {
   const [user, setUser] = useState<User | null>(null);
   const [checkingUser, setCheckingUser] = useState(true);
-  const [loggingIn, setLoggingIn] = useState(false);
   const [movingId, setMovingId] = useState<string | null>(null);
   const [loginPrompt, setLoginPrompt] = useState(false);
+  const [loginError, setLoginError] = useState(false);
   const [source, setSource] = useState("전체");
 
   useEffect(() => {
@@ -21,6 +21,13 @@ export default function DealsClient() {
       .then((response) => (response.ok ? response.json() : null))
       .then((data) => setUser(data?.user ?? null))
       .finally(() => setCheckingUser(false));
+
+    const url = new URL(window.location.href);
+    if (url.searchParams.has("login_error")) {
+      setLoginError(true);
+      url.searchParams.delete("login_error");
+      window.history.replaceState({}, "", `${url.pathname}${url.search}${url.hash}`);
+    }
   }, []);
 
   const visibleDeals = useMemo(
@@ -28,17 +35,8 @@ export default function DealsClient() {
     [source],
   );
 
-  async function testKakaoLogin() {
-    setLoggingIn(true);
-    try {
-      const response = await fetch("/api/auth/test-kakao", { method: "POST" });
-      if (!response.ok) throw new Error("로그인에 실패했습니다.");
-      const data = (await response.json()) as { user: User };
-      setUser(data.user);
-      setLoginPrompt(false);
-    } finally {
-      setLoggingIn(false);
-    }
+  function kakaoLogin() {
+    window.location.href = "/api/auth/kakao";
   }
 
   async function logout() {
@@ -92,6 +90,12 @@ export default function DealsClient() {
           )}
         </div>
       </header>
+      {loginError && (
+        <div className="login-error" role="alert">
+          카카오 로그인을 완료하지 못했습니다. 카카오 앱 설정과 Redirect URI를 확인해 주세요.
+          <button onClick={() => setLoginError(false)}>닫기</button>
+        </div>
+      )}
 
       <section className="hero" id="top">
         <p className="eyebrow">LIMITED DEALS, ONE PLACE</p>
@@ -147,10 +151,10 @@ export default function DealsClient() {
             <span className="login-mark">공라</span>
             <h2 id="login-title">상품을 보러 가기 전에<br />로그인이 필요해요</h2>
             <p>어떤 공동구매에 관심이 있었는지 안전하게 기록하고 더 나은 상품을 추천해 드릴게요.</p>
-            <button className="kakao-login" onClick={testKakaoLogin} disabled={loggingIn}>
-              <span>●</span>{loggingIn ? "테스트 로그인 중" : "카카오로 계속하기"}
+            <button className="kakao-login" onClick={kakaoLogin}>
+              <span>●</span>카카오로 계속하기
             </button>
-            <small>현재는 개발용 테스트 모드이며 실제 카카오 계정 정보에 접근하지 않습니다.</small>
+            <small>카카오 로그인 후 상품 선택 이력이 공라 계정에 저장됩니다.</small>
           </section>
         </div>
       )}
