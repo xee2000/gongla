@@ -147,11 +147,44 @@ function statusAt(start: string, end: string, now: Date): CrawledProduct["status
   return "active";
 }
 
+const robotsCache = new Map<string, string>();
+
+async function robotsAllows(target: URL) {
+  const robotsUrl = `${target.origin}/robots.txt`;
+  let rules = robotsCache.get(robotsUrl);
+  if (rules === undefined) {
+    try {
+      const response = await fetch(robotsUrl, {
+        headers: { "user-agent": "GonglaBot/1.0 (+https://gongla.netlify.app)" },
+        signal: AbortSignal.timeout(5_000),
+      });
+      rules = response.ok ? await response.text() : "";
+    } catch {
+      rules = "";
+    }
+    robotsCache.set(robotsUrl, rules);
+  }
+  let applies = false;
+  const disallowed: string[] = [];
+  for (const rawLine of rules.split("\n")) {
+    const line = rawLine.split("#", 1)[0].trim();
+    const separator = line.indexOf(":");
+    if (separator < 0) continue;
+    const field = line.slice(0, separator).trim().toLowerCase();
+    const value = line.slice(separator + 1).trim();
+    if (field === "user-agent") applies = value === "*" || value.toLowerCase() === "gonglabot";
+    if (field === "disallow" && applies && value) disallowed.push(value);
+  }
+  return !disallowed.some((path) => path === "/" || target.pathname.startsWith(path));
+}
+
 export async function crawlProductPage(
   requestedUrl: string,
   source: CrawledProduct["source"],
   now = new Date(),
 ): Promise<CrawledProduct | null> {
+  const target = new URL(requestedUrl);
+  if (!(await robotsAllows(target))) throw new Error("robots.txt에서 자동 수집을 허용하지 않습니다.");
   const response = await fetch(requestedUrl, {
     headers: {
       accept: "text/html,application/xhtml+xml",

@@ -23,6 +23,24 @@ export default async function handler(request: Request) {
       error: error instanceof Error ? error.message : String(error),
     });
   }
+  const linkedShoppingUrls = Array.from(
+    new Set(
+      products
+        .map((product) => product.purchase_url)
+        .filter((url) => !/\.(naver\.com|naver\.me)(\/|$)/i.test(new URL(url).hostname)),
+    ),
+  ).slice(0, 30);
+  for (const url of linkedShoppingUrls) {
+    try {
+      const linkedProduct = await crawlProductPage(url, "shopping_mall");
+      if (linkedProduct) products.push(linkedProduct);
+    } catch (error) {
+      errors.push({
+        url,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
   for (const target of crawlerTargets()) {
     try {
       const product = await crawlProductPage(target.url, target.source);
