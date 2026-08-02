@@ -74,7 +74,7 @@ function firstExternalUrl(content: string, excludedHosts: string[]) {
 export async function discoverYoutubePaidPromotions(now = new Date()) {
   const key = process.env.YOUTUBE_API_KEY;
   if (!key) return [];
-  const days = Math.max(1, Number(process.env.YOUTUBE_LOOKBACK_DAYS ?? 14));
+  const days = Math.max(1, Number(process.env.YOUTUBE_LOOKBACK_DAYS ?? 90));
   const publishedAfter = new Date(now.getTime() - days * 86_400_000).toISOString();
   const search = new URL("https://www.googleapis.com/youtube/v3/search");
   search.search = new URLSearchParams({
@@ -85,6 +85,7 @@ export async function discoverYoutubePaidPromotions(now = new Date()) {
     maxResults: "50",
     regionCode: "KR",
     relevanceLanguage: "ko",
+    q: process.env.YOUTUBE_SEARCH_QUERY ?? "공동구매|할인|특가|기간한정|광고",
     publishedAfter,
     key,
   }).toString();
