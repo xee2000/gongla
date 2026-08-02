@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { deals, type Deal } from "./deals";
+import type { Deal } from "./deal";
 
 type User = { id: string; nickname: string; provider: string };
 const PENDING_DEAL_KEY = "gongla_pending_deal_id";
@@ -9,7 +9,7 @@ const PENDING_DEAL_KEY = "gongla_pending_deal_id";
 const formatPrice = (value: number | null) =>
   value === null ? "판매 페이지에서 확인" : `${new Intl.NumberFormat("ko-KR").format(value)}원`;
 
-export default function DealsClient() {
+export default function DealsClient({ deals }: { deals: Deal[] }) {
   const [user, setUser] = useState<User | null>(null);
   const [checkingUser, setCheckingUser] = useState(true);
   const [movingId, setMovingId] = useState<string | null>(null);

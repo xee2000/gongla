@@ -38,7 +38,6 @@ export async function POST(request: Request) {
     productName: body.productName.slice(0, 500),
     source: body.source.slice(0, 100),
     targetUrl: target.toString().slice(0, 2000),
-    clickedAt: Date.now(),
   });
 
   return Response.json({ redirectUrl: target.toString() });

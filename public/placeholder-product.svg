@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 600">
+  <rect width="800" height="600" fill="#eeeae1"/>
+  <path d="M300 390h200l-24-145H324z" fill="#d8d0c1"/>
+  <path d="M350 260c0-70 100-70 100 0" fill="none" stroke="#8f8778" stroke-width="18"/>
+  <text x="400" y="480" text-anchor="middle" font-family="sans-serif" font-size="30" fill="#6d665b">공라 공동구매</text>
+</svg>

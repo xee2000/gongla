@@ -1,5 +1,5 @@
-import { getStore } from "@netlify/blobs";
 import type { SessionUser } from "./session";
+import { supabaseRest } from "./supabase-rest";
 
 export type StoredUser = SessionUser & {
   providerUserId: string;
@@ -8,24 +8,31 @@ export type StoredUser = SessionUser & {
 };
 
 export async function saveKakaoUser(providerUserId: string, nickname: string): Promise<StoredUser> {
-  const users = getStore("gongla-users");
-  const key = `kakao-${providerUserId}`;
-  const existing = await users.get(key, { type: "json", consistency: "strong" }) as StoredUser | null;
+  const rows = await supabaseRest<Array<{ id: string; nickname: string; provider: "kakao" }>>(
+    "rpc/upsert_kakao_user",
+    { method: "POST", body: JSON.stringify({ p_provider_user_id: providerUserId, p_nickname: nickname }) },
+  );
+  const row = rows[0];
+  if (!row) throw new Error("Supabase did not return the Kakao user.");
   const now = Date.now();
-  const user: StoredUser = {
-    id: key,
-    provider: "kakao",
-    providerUserId,
-    nickname,
-    createdAt: existing?.createdAt ?? now,
-    lastLoginAt: now,
-  };
-  await users.setJSON(key, user);
-  return user;
+  return { ...row, providerUserId, createdAt: now, lastLoginAt: now };
 }
 
-export async function saveProductClick(click: Record<string, string | number>) {
-  const clicks = getStore("gongla-product-clicks");
-  const key = `${Date.now()}-${crypto.randomUUID()}`;
-  await clicks.setJSON(key, click);
+export async function saveProductClick(click: {
+  userId: string;
+  productId: string;
+  productName: string;
+  source: string;
+  targetUrl: string;
+}) {
+  await supabaseRest("rpc/record_purchase_click", {
+    method: "POST",
+    body: JSON.stringify({
+      p_user_id: click.userId,
+      p_product_id: click.productId,
+      p_product_name: click.productName,
+      p_source: click.source,
+      p_purchase_url: click.targetUrl,
+    }),
+  });
 }
