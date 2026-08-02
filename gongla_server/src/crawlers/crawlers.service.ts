@@ -4,6 +4,7 @@ import { ProductsService } from '../products/products.service';
 import { IngestProductDto } from '../products/dto/ingest-products.dto';
 import { CrawlerProvider, CrawlerRunResult } from './crawler.types';
 import { FeedCrawlerFactory } from './feed-crawler.service';
+import { PageCrawlerFactory } from './page-crawler.service';
 
 @Injectable()
 export class CrawlersService {
@@ -13,6 +14,7 @@ export class CrawlersService {
 
   constructor(
     factory: FeedCrawlerFactory,
+    pageFactory: PageCrawlerFactory,
     private readonly products: ProductsService,
     private readonly config: ConfigService,
   ) {
@@ -22,6 +24,17 @@ export class CrawlersService {
         'naver-smartstore',
         'naver_smartstore',
         'NAVER_SMARTSTORE_CRAWLER_FEED_URL',
+      ),
+      pageFactory.create('youtube-pages', 'youtube', 'YOUTUBE_CRAWLER_URLS'),
+      pageFactory.create(
+        'naver-smartstore-pages',
+        'naver_smartstore',
+        'NAVER_SMARTSTORE_CRAWLER_URLS',
+      ),
+      pageFactory.create(
+        'shopping-mall-pages',
+        'shopping_mall',
+        'SHOPPING_MALL_CRAWLER_URLS',
       ),
     ];
   }

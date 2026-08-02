@@ -10,6 +10,8 @@ YouTube, 네이버 스마트스토어 등 여러 플랫폼의 기간 한정 공�
 - 매분 판매 시작/종료 시각을 확인해 `scheduled`, `active`, `ended` 상태 갱신
 - 출처와 외부 상품 ID 기준 중복 상품 갱신
 - 판매 중인 상품 목록/상세 API
+- YouTube, 네이버 스마트스토어, 일반 쇼핑몰 공개 페이지 직접 수집
+- JSON-LD, Open Graph, YouTube 게시물 설명에서 상품 정보와 판매기간 추출
 - 플랫폼별 수집기를 연결할 수 있는 표준 JSON 피드 어댑터
 - 수동 수집 실행 및 수집 결과 입력 API
 - Swagger API 문서
@@ -56,10 +58,28 @@ Publishable 키는 원래 공개 가능한 값이므로 이 구성에서는 외�
 상품 상태 동기화는 매분 0초에 실행됩니다. 종료 시각이 12:00이면 12:00부터
 `ended`가 되어 공개 상품 조회에서 제외됩니다.
 
-## 플랫폼 수집기 연결
+## 직접 크롤링 대상 설정
 
-YouTube와 네이버 스마트스토어의 대상 채널, 검색어, 상점 URL이 아직 정해지지 않아
-현재는 플랫폼별 표준 JSON 피드 URL을 환경변수로 받습니다.
+공개 상품 페이지나 기간 한정 홍보 게시물 URL을 쉼표로 구분해 설정합니다.
+
+```text
+YOUTUBE_CRAWLER_URLS=https://www.youtube.com/watch?v=영상ID
+NAVER_SMARTSTORE_CRAWLER_URLS=https://smartstore.naver.com/상점/products/상품ID
+SHOPPING_MALL_CRAWLER_URLS=https://shop.example.com/products/상품ID
+```
+
+여러 URL을 등록할 때는 쉼표 또는 줄바꿈으로 구분합니다. 서버는 JSON-LD 상품 정보,
+Open Graph 메타데이터, YouTube 영상 설명을 순서대로 확인합니다. 상품명, 구매 링크와
+판매 시작/종료 시각을 확인할 수 있는 항목만 `products` 테이블에 저장합니다. 판매기간을
+판별할 수 없는 일반 게시물은 공개 상품으로 잘못 노출되지 않도록 제외합니다.
+
+페이지의 robots.txt, 플랫폼 이용약관과 접근 제한을 준수해야 합니다. 로그인이 필요하거나
+자동 접근을 차단한 페이지는 공식 API 또는 아래 표준 피드 방식으로 연결하는 것이 안전합니다.
+
+## 표준 피드 수집기 연결
+
+공식 API나 별도 플랫폼 수집기가 있다면 표준 JSON 피드 URL을 환경변수로 연결할 수
+있습니다.
 
 ```text
 YOUTUBE_CRAWLER_FEED_URL=https://crawler.example.com/youtube/items
