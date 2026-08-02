@@ -1,0 +1,107 @@
+# gongla_server
+
+YouTube, 네이버 스마트스토어 등 여러 플랫폼의 기간 한정 공동구매 상품을
+표준화하여 Supabase에 저장하고 제공하는 NestJS 서버입니다.
+
+## 구현 기능
+
+- 상품명, 정가, 할인가, 출처, 이미지, 판매 시작/종료 시각, 구매 링크 저장
+- 한국시간 기준 매일 09:00, 12:00, 19:00 수집 실행
+- 매분 판매 시작/종료 시각을 확인해 `scheduled`, `active`, `ended` 상태 갱신
+- 출처와 외부 상품 ID 기준 중복 상품 갱신
+- 판매 중인 상품 목록/상세 API
+- 플랫폼별 수집기를 연결할 수 있는 표준 JSON 피드 어댑터
+- 수동 수집 실행 및 수집 결과 입력 API
+- Swagger API 문서
+
+## 시작하기
+
+```bash
+npm install
+npm run start:dev
+```
+
+- API: `http://localhost:3000/api`
+- Swagger: `http://localhost:3000/docs`
+- 상품 목록: `GET http://localhost:3000/api/products`
+
+## Supabase 설정
+
+Supabase SQL Editor에서 다음 파일을 실행합니다.
+
+```text
+supabase/migrations/001_create_products.sql
+```
+
+`.env.example`을 참고해 `.env`를 설정합니다. Publishable 키는 공개 상품 조회에는
+사용할 수 있지만 크롤링 결과 저장과 상태 변경에는 권한이 부족합니다. 운영 서버에는
+반드시 Supabase 프로젝트 설정에서 확인한 서버 전용 `SUPABASE_SERVICE_ROLE_KEY`를
+환경변수로 추가해야 합니다. 이 값은 GitHub나 클라이언트에 노출하면 안 됩니다.
+
+## 크롤링 시간
+
+`Asia/Seoul` 기준으로 다음 시간에 실행됩니다.
+
+```text
+09:00
+12:00
+19:00
+```
+
+상품 상태 동기화는 매분 0초에 실행됩니다. 종료 시각이 12:00이면 12:00부터
+`ended`가 되어 공개 상품 조회에서 제외됩니다.
+
+## 플랫폼 수집기 연결
+
+YouTube와 네이버 스마트스토어의 대상 채널, 검색어, 상점 URL이 아직 정해지지 않아
+현재는 플랫폼별 표준 JSON 피드 URL을 환경변수로 받습니다.
+
+```text
+YOUTUBE_CRAWLER_FEED_URL=https://crawler.example.com/youtube/items
+NAVER_SMARTSTORE_CRAWLER_FEED_URL=https://crawler.example.com/naver/items
+```
+
+피드는 배열 또는 `{ "items": [...] }` 형식을 반환해야 합니다.
+
+```json
+{
+  "items": [
+    {
+      "externalId": "platform-product-123",
+      "name": "기간 한정 수영복",
+      "originalPrice": 50000,
+      "salePrice": 40000,
+      "sourceName": "판매 채널명",
+      "imageUrl": "https://example.com/swimsuit.jpg",
+      "saleStartAt": "2026-08-03T00:00:00+09:00",
+      "saleEndAt": "2026-08-07T12:00:00+09:00",
+      "purchaseUrl": "https://example.com/products/123",
+      "sourceUrl": "https://youtube.com/watch?v=example"
+    }
+  ]
+}
+```
+
+서버가 수집원에 맞춰 `source` 값을 강제로 지정하므로 피드가 출처를 조작할 수 없습니다.
+
+## 관리 API
+
+다음 요청에는 `.env`의 `CRAWLER_ADMIN_KEY` 값을 `x-crawler-key` 헤더로 전달합니다.
+
+```text
+POST /api/crawler/run
+POST /api/crawler/ingest
+```
+
+`/ingest`는 플랫폼 전용 수집기가 데이터를 직접 전달할 때 사용합니다.
+
+## 공개 상품 API
+
+```text
+GET /api/products?status=active&source=youtube&search=수영복&limit=30&offset=0
+GET /api/products/:id
+```
+
+`status`는 `scheduled`, `active`, `ended`, `all` 중 하나입니다. 공개용 Publishable 키에는
+DB 정책상 현재 판매 중인 상품만 직접 조회할 수 있습니다. 관리자용 전체 상태 조회는
+NestJS 서버에서 별도 인증을 추가한 뒤 제공하는 것을 권장합니다.
