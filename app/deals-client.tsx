@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { deals, type Deal } from "./deals";
 
 type User = { id: string; nickname: string; provider: string };
+const PENDING_DEAL_KEY = "gongla_pending_deal_id";
 
 const formatPrice = (value: number | null) =>
   value === null ? "판매 페이지에서 확인" : `${new Intl.NumberFormat("ko-KR").format(value)}원`;
@@ -30,6 +31,15 @@ export default function DealsClient() {
     }
   }, []);
 
+  useEffect(() => {
+    if (checkingUser || !user) return;
+    const pendingDealId = window.sessionStorage.getItem(PENDING_DEAL_KEY);
+    if (!pendingDealId) return;
+    window.sessionStorage.removeItem(PENDING_DEAL_KEY);
+    const pendingDeal = deals.find((deal) => deal.id === pendingDealId);
+    if (pendingDeal) void recordClickAndMove(pendingDeal);
+  }, [checkingUser, user]);
+
   const visibleDeals = useMemo(
     () => (source === "전체" ? deals : deals.filter((deal) => deal.source === source)),
     [source],
@@ -39,16 +49,17 @@ export default function DealsClient() {
     window.location.href = "/api/auth/kakao";
   }
 
+  function closeLoginPrompt() {
+    window.sessionStorage.removeItem(PENDING_DEAL_KEY);
+    setLoginPrompt(false);
+  }
+
   async function logout() {
     await fetch("/api/auth/logout", { method: "POST" });
     setUser(null);
   }
 
-  async function moveToProduct(deal: Deal) {
-    if (!user) {
-      setLoginPrompt(true);
-      return;
-    }
+  async function recordClickAndMove(deal: Deal) {
     setMovingId(deal.id);
     try {
       const response = await fetch("/api/clicks", {
@@ -63,6 +74,7 @@ export default function DealsClient() {
       });
       if (response.status === 401) {
         setUser(null);
+        window.sessionStorage.setItem(PENDING_DEAL_KEY, deal.id);
         setLoginPrompt(true);
         return;
       }
@@ -74,6 +86,15 @@ export default function DealsClient() {
     } finally {
       setMovingId(null);
     }
+  }
+
+  async function moveToProduct(deal: Deal) {
+    if (!user) {
+      window.sessionStorage.setItem(PENDING_DEAL_KEY, deal.id);
+      setLoginPrompt(true);
+      return;
+    }
+    await recordClickAndMove(deal);
   }
 
   return (
@@ -145,9 +166,9 @@ export default function DealsClient() {
       <footer><strong>공라</strong><p>상품 가격과 판매 기간은 연결된 판매 페이지에서 최종 확인해 주세요.</p></footer>
 
       {loginPrompt && (
-        <div className="modal-backdrop" role="presentation" onMouseDown={() => setLoginPrompt(false)}>
+        <div className="modal-backdrop" role="presentation" onMouseDown={closeLoginPrompt}>
           <section className="login-modal" role="dialog" aria-modal="true" aria-labelledby="login-title" onMouseDown={(event) => event.stopPropagation()}>
-            <button className="modal-close" aria-label="닫기" onClick={() => setLoginPrompt(false)}>×</button>
+            <button className="modal-close" aria-label="닫기" onClick={closeLoginPrompt}>×</button>
             <span className="login-mark">공라</span>
             <h2 id="login-title">상품을 보러 가기 전에<br />로그인이 필요해요</h2>
             <p>어떤 공동구매에 관심이 있었는지 안전하게 기록하고 더 나은 상품을 추천해 드릴게요.</p>
