@@ -10,7 +10,9 @@ export default function ProductDetailClient({ deal }: { deal: Deal }) {
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    fetch("/api/auth/me").then((response) => response.json()).then((data) => setUser(data.user ?? null));
+    fetch("/api/auth/me", { cache: "no-store", credentials: "same-origin" })
+      .then((response) => response.json())
+      .then((data) => setUser(data.user ?? null));
   }, []);
 
   async function purchase() {

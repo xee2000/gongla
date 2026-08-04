@@ -19,7 +19,7 @@ export default function DealsClient({ deals }: { deals: Deal[] }) {
   const [source, setSource] = useState("전체");
 
   useEffect(() => {
-    fetch("/api/auth/me")
+    fetch("/api/auth/me", { cache: "no-store", credentials: "same-origin" })
       .then((response) => (response.ok ? response.json() : null))
       .then((data) => setUser(data?.user ?? null))
       .finally(() => setCheckingUser(false));
