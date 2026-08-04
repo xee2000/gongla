@@ -20,11 +20,16 @@ export async function saveKakaoUser(providerUserId: string, nickname: string): P
 
 export async function saveProductClick(click: {
   userId: string;
+  userNickname: string;
   productId: string;
   productName: string;
   source: string;
   targetUrl: string;
 }) {
+  const providerUserId = click.userId.startsWith("kakao-")
+    ? click.userId.slice("kakao-".length)
+    : click.userId;
+  await saveKakaoUser(providerUserId, click.userNickname);
   await supabaseRest("rpc/record_purchase_click", {
     method: "POST",
     body: JSON.stringify({

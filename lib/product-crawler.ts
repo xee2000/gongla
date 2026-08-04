@@ -76,35 +76,42 @@ export async function discoverYoutubePaidPromotions(now = new Date()) {
   if (!key) return [];
   const days = Math.max(1, Number(process.env.YOUTUBE_LOOKBACK_DAYS ?? 90));
   const publishedAfter = new Date(now.getTime() - days * 86_400_000).toISOString();
-  const search = new URL("https://www.googleapis.com/youtube/v3/search");
-  search.search = new URLSearchParams({
-    part: "snippet",
-    type: "video",
-    videoPaidProductPlacement: "true",
-    order: "date",
-    maxResults: "50",
-    regionCode: "KR",
-    relevanceLanguage: "ko",
-    q: process.env.YOUTUBE_SEARCH_QUERY ?? "공동구매|할인|특가|기간한정|광고",
-    publishedAfter,
-    key,
-  }).toString();
-  const searchResponse = await fetch(search, { signal: AbortSignal.timeout(25_000) });
-  if (!searchResponse.ok) throw new Error(`YouTube search failed: HTTP ${searchResponse.status}`);
-  const searchJson = (await searchResponse.json()) as { items?: Array<{ id?: { videoId?: string } }> };
-  const ids = (searchJson.items ?? []).map((item) => item.id?.videoId).filter((id): id is string => Boolean(id));
+  const known = await knownYoutubeExternalIds();
+  const ids: string[] = [];
+  let pageToken: string | undefined;
+  const pages = Math.min(10, Math.max(1, Number(process.env.YOUTUBE_SEARCH_PAGES ?? 5)));
+  for (let page = 0; page < pages; page += 1) {
+    const search = new URL("https://www.googleapis.com/youtube/v3/search");
+    const params = new URLSearchParams({
+      part: "snippet",
+      type: "video",
+      videoPaidProductPlacement: "true",
+      order: "date",
+      maxResults: "50",
+      regionCode: "KR",
+      relevanceLanguage: "ko",
+      q: process.env.YOUTUBE_SEARCH_QUERY ?? "공동구매|할인|특가|기간한정|광고",
+      publishedAfter,
+      key,
+    });
+    if (pageToken) params.set("pageToken", pageToken);
+    search.search = params.toString();
+    const response = await fetch(search, { signal: AbortSignal.timeout(25_000) });
+    if (!response.ok) throw new Error(`YouTube search failed: HTTP ${response.status}`);
+    const json = (await response.json()) as {
+      items?: Array<{ id?: { videoId?: string } }>;
+      nextPageToken?: string;
+    };
+    for (const item of json.items ?? []) {
+      const id = item.id?.videoId;
+      if (id && !known.has(id) && !ids.includes(id)) ids.push(id);
+    }
+    pageToken = json.nextPageToken;
+    if (!pageToken) break;
+  }
   if (!ids.length) return [];
 
-  const videosUrl = new URL("https://www.googleapis.com/youtube/v3/videos");
-  videosUrl.search = new URLSearchParams({
-    part: "snippet,paidProductPlacementDetails",
-    id: ids.join(","),
-    key,
-  }).toString();
-  const videosResponse = await fetch(videosUrl, { signal: AbortSignal.timeout(25_000) });
-  if (!videosResponse.ok) throw new Error(`YouTube videos failed: HTTP ${videosResponse.status}`);
-  const videosJson = (await videosResponse.json()) as {
-    items?: Array<{
+  type YoutubeVideo = {
       id: string;
       snippet?: {
         title?: string;
@@ -113,10 +120,22 @@ export async function discoverYoutubePaidPromotions(now = new Date()) {
         thumbnails?: Record<string, { url?: string }>;
       };
       paidProductPlacementDetails?: { hasPaidProductPlacement?: boolean };
-    }>;
   };
+  const videos: YoutubeVideo[] = [];
+  for (let offset = 0; offset < ids.length; offset += 50) {
+    const videosUrl = new URL("https://www.googleapis.com/youtube/v3/videos");
+    videosUrl.search = new URLSearchParams({
+      part: "snippet,paidProductPlacementDetails",
+      id: ids.slice(offset, offset + 50).join(","),
+      key,
+    }).toString();
+    const response = await fetch(videosUrl, { signal: AbortSignal.timeout(25_000) });
+    if (!response.ok) throw new Error(`YouTube videos failed: HTTP ${response.status}`);
+    const json = (await response.json()) as { items?: YoutubeVideo[] };
+    videos.push(...(json.items ?? []));
+  }
 
-  return (videosJson.items ?? []).flatMap((video): CrawledProduct[] => {
+  return videos.flatMap((video): CrawledProduct[] => {
     if (!video.paidProductPlacementDetails?.hasPaidProductPlacement) return [];
     const description = video.snippet?.description ?? "";
     const period = inferKoreanPeriod(description, now);
@@ -140,6 +159,18 @@ export async function discoverYoutubePaidPromotions(now = new Date()) {
       last_crawled_at: now.toISOString(),
     }];
   });
+}
+
+async function knownYoutubeExternalIds() {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY ?? process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
+  if (!url || !key) return new Set<string>();
+  const response = await fetch(`${url}/rest/v1/products?select=external_id&source=eq.youtube`, {
+    headers: { apikey: key, authorization: `Bearer ${key}` },
+  });
+  if (!response.ok) return new Set<string>();
+  const rows = (await response.json()) as Array<{ external_id: string }>;
+  return new Set(rows.map((row) => row.external_id));
 }
 
 function statusAt(start: string, end: string, now: Date): CrawledProduct["status"] {

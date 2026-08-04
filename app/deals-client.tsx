@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import type { Deal } from "./deal";
 
 type User = { id: string; nickname: string; provider: string };
@@ -119,12 +120,8 @@ export default function DealsClient({ deals }: { deals: Deal[] }) {
       )}
 
       <section className="hero" id="top">
-        <p className="eyebrow">LIMITED DEALS, ONE PLACE</p>
-        <h1>흩어진 공동구매를<br /><em>한눈에.</em></h1>
-        <div className="hero-footer">
-          <p>YouTube부터 스마트스토어까지,<br />지금 열려 있는 기간 한정 상품을 모았습니다.</p>
-          <div className="stats"><strong>{deals.length}</strong><span>진행 상품</span><strong>3</strong><span>연결 출처</span></div>
-        </div>
+        <div><span className="live-pill">LIVE DEALS</span><h1>지금 뜨는<br /><em>공동구매</em></h1></div>
+        <p>유튜브 광고에서 발견한 기간 한정 상품을 한눈에 비교하세요.</p>
       </section>
 
       <nav className="source-filter" aria-label="상품 출처">
@@ -135,12 +132,12 @@ export default function DealsClient({ deals }: { deals: Deal[] }) {
 
       <section className="catalog-section">
         <div className="catalog-heading">
-          <div><span>LIVE DEAL COLLECTION</span><h2>{source === "전체" ? "오늘의 공동구매" : source}</h2></div>
+          <div><span>LIVE DEAL COLLECTION</span><h2>{source === "전체" ? "지금 뜨는 공구" : source}</h2></div>
           <p>{visibleDeals.length}개의 상품</p>
         </div>
         <div className="deal-grid">
           {visibleDeals.map((deal) => (
-            <article className="deal-card" key={deal.id}>
+            <Link className="deal-card" key={deal.id} href={`/products/${deal.id}`}>
               <div className="image-link">
                 <img src={deal.imageUrl} alt="" loading="lazy" />
                 <span className="timer-badge">기간 한정</span>
@@ -154,11 +151,9 @@ export default function DealsClient({ deals }: { deals: Deal[] }) {
                   {deal.originalPrice !== null && <del>{formatPrice(deal.originalPrice)}</del>}
                 </div>
                 <div className="period"><span>판매 기간</span><strong>{deal.period}</strong></div>
-                <button className="buy-button" disabled={movingId === deal.id} onClick={() => moveToProduct(deal)}>
-                  {movingId === deal.id ? "이동 준비 중" : "상품으로 이동하기"}<span>↗</span>
-                </button>
+                <div className="buy-button">가격 비교하고 참여하기<span>→</span></div>
               </div>
-            </article>
+            </Link>
           ))}
         </div>
       </section>
